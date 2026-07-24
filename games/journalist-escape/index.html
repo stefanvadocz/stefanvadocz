@@ -2,7 +2,7 @@
 <html lang="sk">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Útek pred novinármi</title>
 <style>
   :root{
@@ -22,11 +22,13 @@
     font-family: 'Courier New', Courier, monospace;
     color: var(--text);
     -webkit-font-smoothing: none;
+    touch-action: none;
+    overscroll-behavior: none;
+    -webkit-user-select: none; user-select: none;
   }
   #wrap{
     position:relative;
-    width: 960px;
-    max-width: 100vw;
+    width: min(960px, 100vw, 177.78dvh);
   }
   #stage{
     position:relative;
@@ -37,6 +39,7 @@
     border-radius: 6px;
     overflow:hidden;
     box-shadow: 0 0 0 2px #000, 0 20px 60px rgba(0,0,0,.6);
+    touch-action: none;
   }
   canvas{
     width:100%; height:100%;
@@ -61,7 +64,8 @@
   }
   #progressBar{
     position:absolute; top:8px; left:50%; transform: translateX(-50%);
-    width: 300px; height: 10px;
+    width: min(300px, 34vw);
+    height: 10px;
     background: rgba(10,12,16,.6);
     border: 2px solid #2a2f3d;
     border-radius: 4px;
@@ -100,6 +104,7 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     text-align:center; padding: 20px;
     gap: 10px;
+    overflow-y:auto;
   }
   .hidden{ display:none !important; }
   .title{
@@ -143,9 +148,56 @@
   footer{
     text-align:center; color:#5a6070; font-size:11px; margin-top:8px;
   }
+
+  /* ---------- Touch controls ---------- */
+  .touchControls{ display:none; }
+  body.touch .touchControls{ display:block; }
+  .tbtn{
+    touch-action:none; -webkit-user-select:none; user-select:none;
+    background: rgba(20,24,32,.6);
+    border: 2px solid rgba(255,255,255,.28);
+    color:#fff;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:bold;
+    pointer-events:auto;
+  }
+  .tbtn:active{ background: rgba(255,207,77,.35); border-color: var(--accent); }
+  .touchLeft{
+    position:absolute; left:10px; bottom:64px;
+    display:flex; gap:10px;
+  }
+  .touchRight{
+    position:absolute; right:10px; bottom:64px;
+    display:flex; align-items:flex-end; gap:10px;
+  }
+  #btnLeft, #btnRight{ width:56px; height:56px; }
+  #btnJump{ width:72px; height:72px; font-size:15px; }
+  #btnSprint{ width:64px; height:64px; font-size:11px; }
+
+  #rotateHint{
+    position:fixed; inset:0; z-index:999;
+    background:#05060a; color:#fff;
+    display:none; align-items:center; justify-content:center;
+    flex-direction:column; gap:14px;
+    font-family: inherit; font-size:16px; text-align:center; padding:20px;
+  }
+  #rotateHint .icon{ font-size:48px; }
+  @media (max-width:900px) and (orientation:portrait){
+    #wrap{ display:none; }
+    #rotateHint{ display:flex; }
+  }
+  @media (max-width:700px){
+    #hud{ font-size:12px; }
+    #staminaWrap{ width:120px; }
+    .hud-box{ padding:3px 6px; }
+    footer{ display:none; }
+  }
 </style>
 </head>
 <body>
+<div id="rotateHint"><div class="icon">🔄</div>Otočte zariadenie na šírku<br>pre hranie hry</div>
+
 <div id="wrap">
   <div id="stage">
     <canvas id="game" width="960" height="540"></canvas>
@@ -163,12 +215,23 @@
       <div id="hitText"></div>
     </div>
 
+    <div class="touchControls">
+      <div class="touchLeft">
+        <div class="tbtn" id="btnLeft">◀</div>
+        <div class="tbtn" id="btnRight">▶</div>
+      </div>
+      <div class="touchRight">
+        <div class="tbtn" id="btnSprint">ŠPRINT</div>
+        <div class="tbtn" id="btnJump">SKOK</div>
+      </div>
+    </div>
+
     <div id="startScreen" class="screen">
       <div class="title">ÚTEK PRED NOVINÁRMI</div>
       <div class="subtitle">Ste respondent, ktorý práve nechce nič komentovať. Utekajte z budovy na ulicu a dobehnite do bezpečia — kým vás nedobehne dav novinárov s mikrofónmi.</div>
       <div class="rules">
-        <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> alebo <span class="kbd">WASD</span> pohyb, <span class="kbd">↑</span>/<span class="kbd">W</span> aj <b>skok</b> cez nízke prekážky, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž).<br><br>
-        V ceste sú <b>prekážky</b> — debny, kužele a koše preskočíte, no skrine a lavičky musíte obehnúť. Novinári sú spočiatku pomalší ako vy, no časom <b>zrýchľujú</b> a strieľajú <b>čoraz častejšie</b> bubliny s otázkami. Každý zásah vás <b>výrazne spomalí</b> a obrazovka na chvíľu <b>blikne</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b> — chytili vás. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
+        <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span> alebo <span class="kbd">A</span><span class="kbd">D</span> beh, <span class="kbd">↑</span>/<span class="kbd">W</span> <b>skok</b> cez prekážky, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž). Na mobile sa ovláda dotykovými tlačidlami na obrazovke.<br><br>
+        Postavička beží <b>len po zemi</b> — v miestnosti po podlahe, na ulici po ceste. Prekážky preskočíte skokom: v interiéri <b>počítače, prázdne fľaše a stoličky</b>, na ulici <b>autá, smetné koše a dlažobné kocky</b>. Cez <b>dvere</b> prejdete z budovy rovno na ulicu. Novinári sú spočiatku pomalší ako vy, no časom <b>zrýchľujú</b> a strieľajú <b>čoraz častejšie</b> bubliny s otázkami. Každý zásah vás <b>výrazne spomalí</b> a obrazovka na chvíľu <b>blikne</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b>. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
       </div>
       <button class="btn" id="startBtn">ŠTART (Enter)</button>
     </div>
@@ -214,13 +277,11 @@
 
   // ---------- World constants ----------
   const WORLD_LENGTH = 7000;
-  const BUILDING_END = 2200;      // interior -> doorway
-  const DOORWAY_END = 2380;       // doorway -> street
+  const DOOR_X = 2200;             // single clean threshold: interior -> exterior
   const SAFEHOUSE_START = WORLD_LENGTH - 480;
   const FINISH_X = WORLD_LENGTH - 140;
 
-  const TOP_BOUND = 90;
-  const BOTTOM_BOUND = 470;
+  const GROUND_Y = Math.round(H * 0.62); // fixed floor/road line — the only line the player walks on
 
   const PLAYER_BASE_SPEED = 215;
   const PLAYER_SPRINT_SPEED = 335;
@@ -240,17 +301,21 @@
   const GRAVITY = 1600;
   const JUMP_IMPULSE = 430;
 
-  // obstacles (deterministic, procedurally placed along the route)
+  // obstacles (deterministic, procedurally placed along the route — no extra state needed)
   const OBSTACLE_SPACING = 240;
-  const OBSTACLE_SAFE_START = 350;       // no obstacles right after spawn
-  const OBSTACLE_DOOR_GAP = [BUILDING_END - 90, DOORWAY_END + 90]; // clear the doorway
+  const OBSTACLE_SAFE_START = 350;                 // no obstacles right after spawn
+  const OBSTACLE_DOOR_GAP = [DOOR_X - 100, DOOR_X + 100]; // clear space around the door
   const OBSTACLE_SAFE_END = SAFEHOUSE_START - 120; // clear run into the safe house
-  const OBSTACLE_TYPES = [
-    { key:'crate', w:44, h:34, jumpable:true, clearHeight:26, color:'#8a6a3a' },
-    { key:'cone',  w:26, h:38, jumpable:true, clearHeight:30, color:'#e0632c' },
-    { key:'bin',   w:34, h:42, jumpable:true, clearHeight:34, color:'#4a5560' },
-    { key:'cabinet', w:40, h:70, jumpable:false, clearHeight:Infinity, color:'#5a4a35' },
-    { key:'bench', w:70, h:36, jumpable:false, clearHeight:Infinity, color:'#6b4a2e' }
+
+  const INTERIOR_OBSTACLES = [
+    { key:'computer', w:46, h:42, clearHeight:36, color:'#3a3f47' },
+    { key:'bottle',   w:16, h:30, clearHeight:16, color:'#2e7d4f' },
+    { key:'chair',    w:34, h:46, clearHeight:40, color:'#6b4a2e' }
+  ];
+  const STREET_OBSTACLES = [
+    { key:'car',         w:92, h:50, clearHeight:46, color:'#b33f3f' },
+    { key:'bin',         w:32, h:42, clearHeight:36, color:'#4a5560' },
+    { key:'cobblestone', w:54, h:16, clearHeight:14, color:'#8a8f96' }
   ];
 
   function hash01(n){
@@ -263,11 +328,10 @@
     if (wx < OBSTACLE_SAFE_START) return null;
     if (wx > OBSTACLE_SAFE_END) return null;
     if (wx > OBSTACLE_DOOR_GAP[0] && wx < OBSTACLE_DOOR_GAP[1]) return null;
-    if (hash01(tileIndex + 0.71) > 0.6) return null; // gaps to keep it fair
-    const typeIdx = Math.floor(hash01(tileIndex + 0.13) * OBSTACLE_TYPES.length) % OBSTACLE_TYPES.length;
-    const type = OBSTACLE_TYPES[typeIdx];
-    const y = TOP_BOUND + hash01(tileIndex + 0.59) * (BOTTOM_BOUND - TOP_BOUND);
-    return { x: wx, y, type };
+    if (hash01(tileIndex + 0.71) > 0.62) return null; // gaps to keep it fair
+    const list = wx < DOOR_X ? INTERIOR_OBSTACLES : STREET_OBSTACLES;
+    const typeIdx = Math.floor(hash01(tileIndex + 0.13) * list.length) % list.length;
+    return { x: wx, type: list[typeIdx] };
   }
 
   const QUESTIONS = [
@@ -281,7 +345,7 @@
     "Kedy sa vyjadríte?"
   ];
 
-  // ---------- Input ----------
+  // ---------- Input (keyboard + touch feed the same key-state map) ----------
   const keys = {};
   window.addEventListener('keydown', (e) => {
     if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].includes(e.code)) e.preventDefault();
@@ -298,6 +362,24 @@
   document.getElementById('retryBtn1').addEventListener('click', startGame);
   document.getElementById('retryBtn2').addEventListener('click', startGame);
 
+  function bindTouchButton(el, code){
+    if (!el) return;
+    const down = (e) => { e.preventDefault(); keys[code] = true; };
+    const up = (e) => { e.preventDefault(); keys[code] = false; };
+    el.addEventListener('pointerdown', down, {passive:false});
+    el.addEventListener('pointerup', up, {passive:false});
+    el.addEventListener('pointercancel', up, {passive:false});
+    el.addEventListener('pointerleave', up, {passive:false});
+  }
+  bindTouchButton(document.getElementById('btnLeft'), 'ArrowLeft');
+  bindTouchButton(document.getElementById('btnRight'), 'ArrowRight');
+  bindTouchButton(document.getElementById('btnJump'), 'ArrowUp');
+  bindTouchButton(document.getElementById('btnSprint'), 'Space');
+
+  if (('ontouchstart' in window) || navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches){
+    document.body.classList.add('touch');
+  }
+
   // ---------- Game state ----------
   let state = null;
 
@@ -312,12 +394,12 @@
       shake: 0,
       flashTimer: 0,
       player: {
-        x: 120, y: 280, facing: 1,
+        x: 120, y: GROUND_Y, facing: 1,
         stamina: STAMINA_MAX, sprinting: false,
         slowStacks: [], animT: 0, animFrame: 0,
         hitFlash: 0, lastHitText: '', hitTextT: 0,
         jumpVel: 0, jumpOffset: 0, grounded: true, jumpKeyLatch: false,
-        stunTimer: 0, bumpFlash: 0
+        stunTimer: 0, bumpFlash: 0, obstacleHitCooldown: 0
       },
       journalists: [],
       bubbles: []
@@ -353,13 +435,12 @@
     if (behind) sx = st.camX - rand(60, 280);
     else sx = st.camX + W + rand(30, 160);
     sx = Math.max(20, sx);
-    const sy = rand(TOP_BOUND, BOTTOM_BOUND);
     st.journalists.push({
-      id: st.nextId++, x: sx, y: sy,
+      id: st.nextId++, x: sx, y: GROUND_Y,
+      visYOffset: (st.nextId % 3 - 1) * 5, // tiny cosmetic stagger so a cluster doesn't fully overlap
       speedFactor: rand(0.85, 1.2),
       shootCooldown: rand(0.6, 1.8),
-      animT: Math.random()*10, animFrame: 0,
-      hue: Math.random()
+      animT: Math.random()*10, animFrame: 0, facing: -1
     });
   }
 
@@ -382,15 +463,12 @@
     const now = performance.now()/1000;
     const p = st.player;
 
-    let mx = 0, my = 0;
+    let mx = 0;
     if (keys.ArrowLeft || keys.KeyA) mx -= 1;
     if (keys.ArrowRight || keys.KeyD) mx += 1;
-    if (keys.ArrowUp || keys.KeyW) my -= 1;
-    if (keys.ArrowDown || keys.KeyS) my += 1;
-    if (mx !== 0 && my !== 0){ mx *= 0.7071; my *= 0.7071; }
     if (mx !== 0) p.facing = mx > 0 ? 1 : -1;
 
-    // jump (edge-triggered hop with basic gravity, used to clear low obstacles)
+    // jump (edge-triggered hop with basic gravity, the only way to clear an obstacle)
     const jumpKeyDown = !!(keys.ArrowUp || keys.KeyW);
     if (jumpKeyDown && !p.jumpKeyLatch && p.grounded){
       p.jumpVel = JUMP_IMPULSE;
@@ -421,27 +499,31 @@
 
     const prevX = p.x;
     p.x += mx * eff * dt;
-    p.y += my * eff * dt;
     p.x = Math.max(20, Math.min(WORLD_LENGTH - 20, p.x));
-    p.y = Math.max(TOP_BOUND, Math.min(BOTTOM_BOUND, p.y));
 
-    // obstacle collision (basic physics: solid wall unless jumped high enough)
-    const firstTile = Math.floor((p.x - 200) / OBSTACLE_SPACING);
-    const lastTile = Math.ceil((p.x + 200) / OBSTACLE_SPACING);
-    for (let ti = firstTile; ti <= lastTile; ti++){
-      const ob = obstacleAt(ti);
-      if (!ob) continue;
-      const halfW = ob.type.w/2 + 14, halfH = ob.type.h/2 + 30;
-      if (Math.abs(p.x - ob.x) < halfW && Math.abs(p.y - ob.y) < halfH){
-        if (ob.type.jumpable && p.jumpOffset >= ob.type.clearHeight) continue;
-        p.x = prevX;
-        p.bumpFlash = 0.2;
-        st.shake = Math.max(st.shake, 0.15);
-        break;
+    // obstacle collision (basic physics: blocked unless you jumped high enough to clear it)
+    if (p.obstacleHitCooldown > 0){
+      p.obstacleHitCooldown -= dt;
+    } else {
+      const firstTile = Math.floor((p.x - 200) / OBSTACLE_SPACING);
+      const lastTile = Math.ceil((p.x + 200) / OBSTACLE_SPACING);
+      for (let ti = firstTile; ti <= lastTile; ti++){
+        const ob = obstacleAt(ti);
+        if (!ob) continue;
+        const halfW = ob.type.w/2 + 13;
+        if (Math.abs(p.x - ob.x) < halfW && p.jumpOffset < ob.type.clearHeight){
+          const dir = p.x >= ob.x ? 1 : -1;
+          p.x = ob.x - dir*(halfW + 4);
+          p.stunTimer = Math.max(p.stunTimer, 0.55);
+          p.bumpFlash = 0.25;
+          st.shake = Math.max(st.shake, 0.3);
+          p.obstacleHitCooldown = 0.5;
+          break;
+        }
       }
     }
 
-    if (mx !== 0 || my !== 0){
+    if (mx !== 0){
       p.animT += dt * (p.sprinting ? 12 : 8);
       p.animFrame = Math.floor(p.animT) % 2;
     }
@@ -464,26 +546,22 @@
       st.spawnTimer = rand(2.6 - ramp*1.6, 3.6 - ramp*2.0);
     }
 
-    // journalists update
+    // journalists update (ground-only: pure horizontal chase)
     for (const j of st.journalists){
       j.speed = JOURNALIST_BASE_SPEED * j.speedFactor * (1 + ramp * 1.1);
-      const dx = p.x - j.x, dy = p.y - j.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const nx = dx/dist, ny = dy/dist;
-      j.x += nx * j.speed * dt;
-      j.y += ny * j.speed * dt;
-      j.y = Math.max(TOP_BOUND, Math.min(BOTTOM_BOUND, j.y));
+      const dx = p.x - j.x;
+      const dist = Math.abs(dx);
+      const dir = dx >= 0 ? 1 : -1;
+      j.x += dir * j.speed * dt;
       j.animT += dt * 6;
       j.animFrame = Math.floor(j.animT) % 2;
-      j.facing = dx >= 0 ? 1 : -1;
+      j.facing = dir;
 
       j.shootCooldown -= dt;
       if (dist < SHOOT_RANGE && j.shootCooldown <= 0){
-        const bdx = p.x - j.x, bdy = p.y - j.y;
-        const bd = Math.hypot(bdx,bdy) || 1;
         st.bubbles.push({
-          x: j.x, y: j.y - 18,
-          vx: (bdx/bd) * BUBBLE_SPEED, vy: (bdy/bd) * BUBBLE_SPEED,
+          x: j.x, y: GROUND_Y - 34,
+          vx: dir * BUBBLE_SPEED,
           text: QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)],
           life: 2.2
         });
@@ -496,13 +574,12 @@
       }
     }
 
-    // bubbles update
+    // bubbles update (straight horizontal travel along the same ground line)
     for (let i = st.bubbles.length - 1; i >= 0; i--){
       const b = st.bubbles[i];
       b.x += b.vx * dt;
-      b.y += b.vy * dt;
       b.life -= dt;
-      const dist = Math.hypot(p.x - b.x, p.y - b.y);
+      const dist = Math.abs(p.x - b.x);
       if (dist < HIT_RADIUS){
         p.slowStacks.push(now + 3.6);
         if (p.slowStacks.length > 5) p.slowStacks.shift();
@@ -529,14 +606,7 @@
   }
 
   // ---------- Background drawing ----------
-  function segmentAt(worldX){
-    if (worldX < BUILDING_END) return 'interior';
-    if (worldX < DOORWAY_END) return 'doorway';
-    return 'street';
-  }
-
   function drawSky(camX){
-    // parallax sky gradient shared
     const grad = ctx.createLinearGradient(0,0,0,H);
     grad.addColorStop(0, '#1c2740');
     grad.addColorStop(1, '#3a4a68');
@@ -545,20 +615,16 @@
   }
 
   function drawInterior(camX){
-    // wall
     ctx.fillStyle = '#3a3226';
     ctx.fillRect(0,0,W,H*0.62);
-    // wall trim
     ctx.fillStyle = '#2a2419';
     ctx.fillRect(0,H*0.55,W,10);
-    // floor
     const floorGrad = ctx.createLinearGradient(0,H*0.62,0,H);
     floorGrad.addColorStop(0,'#7a5b3a');
     floorGrad.addColorStop(1,'#57402a');
     ctx.fillStyle = floorGrad;
     ctx.fillRect(0,H*0.62,W,H*0.38);
 
-    // floor planks
     ctx.strokeStyle = 'rgba(0,0,0,.15)';
     ctx.lineWidth = 2;
     const plankSpacing = 60;
@@ -568,27 +634,18 @@
       ctx.beginPath(); ctx.moveTo(sx, H*0.62); ctx.lineTo(sx, H); ctx.stroke();
     }
 
-    // windows
     const winSpacing = 300;
     startX = Math.floor(camX/winSpacing)*winSpacing;
     for (let wx = startX; wx < camX + W + winSpacing; wx += winSpacing){
-      if (wx > BUILDING_END - 60) continue;
-      const sx = wx - camX;
-      drawWindow(sx, 60);
+      if (wx > DOOR_X - 60) continue;
+      drawWindow(wx - camX, 60);
     }
 
-    // desks / office props
     const deskSpacing = 420;
     startX = Math.floor(camX/deskSpacing)*deskSpacing;
     for (let wx = startX; wx < camX + W + deskSpacing; wx += deskSpacing){
-      if (wx > BUILDING_END - 40) continue;
-      const sx = wx - camX + 140;
-      drawDesk(sx, H*0.62);
-    }
-
-    // exit doorway marker near BUILDING_END
-    if (BUILDING_END - camX > -200 && BUILDING_END - camX < W + 200){
-      drawExitDoor(BUILDING_END - camX);
+      if (wx > DOOR_X - 40) continue;
+      drawDesk(wx - camX + 140, H*0.62);
     }
   }
 
@@ -612,27 +669,41 @@
     ctx.fillRect(sx, sy, dw, dh);
     ctx.fillStyle = '#2f2113';
     ctx.fillRect(sx, sy, dw, 8);
-    // monitor
-    ctx.fillStyle = '#222';
-    ctx.fillRect(sx+dw*0.36, sy-26, 34, 24);
-    ctx.fillStyle = '#4dd0e1';
-    ctx.fillRect(sx+dw*0.36+3, sy-23, 28, 18);
   }
 
-  function drawExitDoor(sx){
-    ctx.fillStyle = '#5c3b1e';
-    ctx.fillRect(sx-30, H*0.30, 60, H*0.62-6-H*0.30+6);
-    ctx.fillStyle = '#ffd873';
-    ctx.fillRect(sx-24, H*0.34, 48, 20);
-    ctx.fillStyle = '#3a2510';
+  function drawDoor(camX, playerX){
+    const sx = DOOR_X - camX;
+    if (sx < -160 || sx > W + 160) return;
+    const doorW = 64, doorH = 168;
+    const frameTop = GROUND_Y - doorH;
+    // casing
+    ctx.fillStyle = '#20180f';
+    ctx.fillRect(sx-doorW/2-9, frameTop-8, doorW+18, doorH+8);
+    // threshold (also hides any seam artifact between the two backgrounds)
+    ctx.fillStyle = '#0d0f14';
+    ctx.fillRect(sx-doorW/2, frameTop, doorW, doorH);
+    // door slab swings open as the player nears it
+    const dist = Math.abs(playerX - DOOR_X);
+    const openT = Math.max(0, Math.min(1, 1 - (dist-30)/160));
+    const scaleX = 1 - openT*0.82;
+    ctx.save();
+    ctx.translate(sx-doorW/2, frameTop);
+    ctx.scale(scaleX, 1);
+    ctx.fillStyle = '#8a5a2f';
+    ctx.fillRect(0,0,doorW,doorH);
+    ctx.fillStyle = '#6b4322';
+    ctx.fillRect(0,0,5,doorH);
+    ctx.fillStyle = '#e8c56a';
+    ctx.beginPath(); ctx.arc(doorW-11, doorH*0.55, 4, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    // sign
+    ctx.fillStyle = '#12c76b';
     ctx.font = 'bold 12px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#fff';
-    ctx.fillText('VÝCHOD', sx, H*0.30-8);
+    ctx.fillText('VÝCHOD →', sx, frameTop-14);
   }
 
   function drawStreet(camX){
-    // distant skyline (parallax)
     ctx.fillStyle = '#232c42';
     const skySpacing = 220;
     let startX = Math.floor((camX*0.4)/skySpacing)*skySpacing;
@@ -642,40 +713,32 @@
       ctx.fillRect(sx, H*0.55-h, 140, h);
     }
 
-    // road
     ctx.fillStyle = '#3a3d42';
     ctx.fillRect(0, H*0.62, W, H*0.38);
     ctx.fillStyle = '#2c2f33';
     ctx.fillRect(0, H*0.62, W, 10);
 
-    // lane markings
     ctx.fillStyle = '#e8d24a';
     const dashSpacing = 90;
     startX = Math.floor(camX/dashSpacing)*dashSpacing;
     for (let wx = startX; wx < camX + W + dashSpacing; wx += dashSpacing){
-      const sx = wx - camX;
-      ctx.fillRect(sx, H*0.80, 46, 6);
+      ctx.fillRect(wx - camX, H*0.80, 46, 6);
     }
 
-    // buildings row (closer, mid parallax)
     const bSpacing = 260;
     startX = Math.floor(camX/bSpacing)*bSpacing;
     for (let wx = startX; wx < camX + W + bSpacing; wx += bSpacing){
       if (wx >= SAFEHOUSE_START - 40) continue;
-      const sx = wx - camX;
       const seed = Math.floor(wx/bSpacing);
-      drawStreetBuilding(sx, seed);
+      drawStreetBuilding(wx - camX, seed);
     }
 
-    // lampposts
     const lampSpacing = 340;
     startX = Math.floor(camX/lampSpacing)*lampSpacing;
     for (let wx = startX; wx < camX + W + lampSpacing; wx += lampSpacing){
-      const sx = wx - camX + 60;
-      drawLamp(sx);
+      drawLamp(wx - camX + 60);
     }
 
-    // safe house
     drawSafeHouse(camX);
   }
 
@@ -688,7 +751,6 @@
     ctx.fillRect(sx, topY, 220, h);
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.fillRect(sx, topY, 220, 10);
-    // windows grid
     ctx.fillStyle = '#ffdf87';
     for (let r=0; r<Math.floor(h/34); r++){
       for (let c=0; c<5; c++){
@@ -719,16 +781,13 @@
     const houseW = 320, houseH = 220;
     const bx = hx + 40;
     const by = floorY - houseH;
-    // glow
     const glow = ctx.createRadialGradient(bx+houseW/2, by+houseH/2, 20, bx+houseW/2, by+houseH/2, 260);
     glow.addColorStop(0, 'rgba(99,224,122,.28)');
     glow.addColorStop(1, 'rgba(99,224,122,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(bx-260, by-260, houseW+520, houseH+520);
-    // body
     ctx.fillStyle = '#e7dcc0';
     ctx.fillRect(bx, by+70, houseW, houseH-70);
-    // roof
     ctx.fillStyle = '#7a2f2f';
     ctx.beginPath();
     ctx.moveTo(bx-20, by+70);
@@ -736,18 +795,15 @@
     ctx.lineTo(bx+houseW+20, by+70);
     ctx.closePath();
     ctx.fill();
-    // door
     ctx.fillStyle = '#2f9e52';
     ctx.fillRect(bx+houseW/2-32, by+houseH-100, 64, 100);
     ctx.fillStyle = '#e7dcc0';
     ctx.beginPath();
     ctx.arc(bx+houseW/2-24, by+houseH-52, 4, 0, Math.PI*2);
     ctx.fill();
-    // windows
     ctx.fillStyle = '#8fd6e8';
     ctx.fillRect(bx+30, by+110, 44, 44);
     ctx.fillRect(bx+houseW-74, by+110, 44, 44);
-    // sign
     ctx.fillStyle = '#123';
     ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'center';
@@ -755,7 +811,7 @@
     ctx.fillText('BEZPEČNÝ DOM', bx+houseW/2, by-42);
   }
 
-  // ---------- Obstacles ----------
+  // ---------- Obstacles (bigger, outlined, colour-coded, jump-arrow marked) ----------
   function drawObstacles(camX){
     const firstTile = Math.floor(camX / OBSTACLE_SPACING) - 1;
     const lastTile = Math.ceil((camX + W) / OBSTACLE_SPACING) + 1;
@@ -764,24 +820,126 @@
       if (!ob) continue;
       const sx = ob.x - camX;
       if (sx < -80 || sx > W + 80) continue;
-      drawObstacle(sx, ob.y, ob.type);
+      drawObstacle(sx, GROUND_Y, ob.type);
     }
   }
 
   function drawObstacle(sx, sy, type){
     const w = type.w, h = type.h;
-    ctx.fillStyle = type.color;
-    ctx.fillRect(sx - w/2, sy - h, w, h);
-    ctx.fillStyle = 'rgba(0,0,0,.25)';
-    ctx.fillRect(sx - w/2, sy - h, w, 5);
+    ctx.save();
+    ctx.translate(sx, sy);
+
     ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.ellipse(0, 4, w*0.55, 6, 0, 0, Math.PI*2); ctx.fill();
+
+    switch (type.key){
+      case 'computer': drawObComputer(w,h,type.color); break;
+      case 'bottle':   drawObBottle(w,h,type.color); break;
+      case 'chair':    drawObChair(w,h,type.color); break;
+      case 'car':      drawObCar(w,h,type.color); break;
+      case 'bin':      drawObBin(w,h,type.color); break;
+      case 'cobblestone': drawObCobblestone(w,h,type.color); break;
+      default:
+        ctx.fillStyle = type.color;
+        ctx.fillRect(-w/2, -h, w, h);
+    }
+
+    // strong outline so every obstacle reads clearly against the background
+    ctx.strokeStyle = 'rgba(0,0,0,.65)';
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(-w/2, -h, w, h);
+
+    // jump-over marker
+    ctx.fillStyle = '#ffcf4d';
     ctx.beginPath();
-    ctx.ellipse(sx, sy + 3, w*0.55, 6, 0, 0, Math.PI*2);
+    ctx.moveTo(0, -h-17);
+    ctx.lineTo(-6, -h-8);
+    ctx.lineTo(6, -h-8);
+    ctx.closePath();
     ctx.fill();
-    if (!type.jumpable){
-      // small warning stripe to signal it must be dodged, not jumped
-      ctx.fillStyle = '#f2c94c';
-      ctx.fillRect(sx - w/2, sy - h*0.5 - 3, w, 5);
+
+    ctx.restore();
+  }
+
+  function drawObComputer(w,h,color){
+    ctx.fillStyle = '#5a4327';
+    ctx.fillRect(-w/2, -10, w, 10);
+    ctx.fillStyle = '#181b1f';
+    ctx.fillRect(-4, -22, 8, 12);
+    ctx.fillStyle = color;
+    ctx.fillRect(-w*0.4, -h, w*0.8, h-22);
+    ctx.fillStyle = '#5fd0e0';
+    ctx.fillRect(-w*0.4+4, -h+4, w*0.8-8, h-30);
+  }
+
+  function drawObBottle(w,h,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(-w/2, -h*0.62, w, h*0.62);
+    ctx.fillRect(-w*0.22, -h, w*0.44, h*0.4);
+    ctx.fillStyle = 'rgba(255,255,255,.4)';
+    ctx.fillRect(-w*0.3, -h*0.55, 2.5, h*0.4);
+  }
+
+  function drawObChair(w,h,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(-w/2+2, -14, 4, 14);
+    ctx.fillRect(w/2-6, -14, 4, 14);
+    ctx.fillRect(-w/2, -18, w, 8);
+    ctx.fillRect(-w/2, -h, 7, h-18);
+  }
+
+  function drawObCar(w,h,color){
+    ctx.fillStyle = color;
+    ctx.fillRect(-w/2, -h*0.55, w, h*0.55);
+    ctx.beginPath();
+    ctx.moveTo(-w*0.28, -h*0.55);
+    ctx.lineTo(-w*0.18, -h);
+    ctx.lineTo(w*0.22, -h);
+    ctx.lineTo(w*0.34, -h*0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#bfe4f2';
+    ctx.beginPath();
+    ctx.moveTo(-w*0.15, -h*0.58);
+    ctx.lineTo(-w*0.07, -h*0.92);
+    ctx.lineTo(w*0.15, -h*0.92);
+    ctx.lineTo(w*0.23, -h*0.58);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#141414';
+    ctx.beginPath(); ctx.arc(-w*0.28, 0, 9, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w*0.28, 0, 9, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#777';
+    ctx.beginPath(); ctx.arc(-w*0.28, 0, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w*0.28, 0, 3, 0, Math.PI*2); ctx.fill();
+  }
+
+  function drawObBin(w,h,color){
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(-w/2, -h);
+    ctx.lineTo(w/2, -h);
+    ctx.lineTo(w*0.38, 0);
+    ctx.lineTo(-w*0.38, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#2c333b';
+    ctx.fillRect(-w/2-2, -h-6, w+4, 6);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-w*0.15, -h+4); ctx.lineTo(-w*0.1, -2);
+    ctx.moveTo(w*0.15, -h+4); ctx.lineTo(w*0.1, -2);
+    ctx.stroke();
+  }
+
+  function drawObCobblestone(w,h,color){
+    const n = 4, bw = w/n;
+    for (let i=0; i<n; i++){
+      const bx = -w/2 + i*bw;
+      const bh = h * (0.6 + (i%2)*0.4);
+      ctx.fillStyle = i%2===0 ? color : '#767b82';
+      ctx.fillRect(bx+1, -bh, bw-2, bh);
     }
   }
 
@@ -907,24 +1065,27 @@
     ctx.translate(shakeX, shakeY);
 
     drawSky(st.camX);
-    // draw based on visible window: interior, street, or both near the transition
-    if (st.camX + W < BUILDING_END + 40){
-      drawInterior(st.camX);
-    } else if (st.camX > DOORWAY_END){
+
+    // clean cut at the door: each side only paints its own half, so there's no mixed overlap
+    const boundary = DOOR_X - st.camX;
+    if (boundary <= 0){
       drawStreet(st.camX);
+    } else if (boundary >= W){
+      drawInterior(st.camX);
     } else {
-      drawInterior(st.camX);
-      drawStreet(st.camX);
+      ctx.save(); ctx.beginPath(); ctx.rect(0,0,boundary,H); ctx.clip(); drawInterior(st.camX); ctx.restore();
+      ctx.save(); ctx.beginPath(); ctx.rect(boundary,0,W-boundary,H); ctx.clip(); drawStreet(st.camX); ctx.restore();
     }
+    drawDoor(st.camX, st.player.x);
 
     drawObstacles(st.camX);
 
-    // journalists (draw back-to-front by y for pseudo depth)
-    const sortedJ = st.journalists.slice().sort((a,b)=>a.y-b.y);
+    // journalists (draw back-to-front by x so nearer ones overlap correctly)
+    const sortedJ = st.journalists.slice().sort((a,b)=>a.x-b.x);
     for (const j of sortedJ){
       const sx = j.x - st.camX;
       if (sx < -60 || sx > W+60) continue;
-      drawCharacter(sx, j.y, {facing: j.facing||1, frame: j.animFrame, jacket:'#57606e', hair:'#2a2a2a', press:true});
+      drawCharacter(sx, GROUND_Y + (j.visYOffset||0), {facing: j.facing||1, frame: j.animFrame, jacket:'#57606e', hair:'#2a2a2a', press:true});
     }
 
     // bubbles
@@ -937,7 +1098,7 @@
     // player
     const p = st.player;
     const psx = p.x - st.camX;
-    const psy = p.y - p.jumpOffset;
+    const psy = GROUND_Y - p.jumpOffset;
     drawCharacter(psx, psy, {facing:p.facing, frame:p.animFrame, jacket:'#2f6fb0', hair:'#3a2a1a', hitFlash: Math.max(p.hitFlash, p.bumpFlash||0)});
 
     ctx.restore();
