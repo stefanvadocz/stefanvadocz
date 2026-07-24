@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Útek pred novinármi</title>
+<style>
+  :root{
+    --bg: #0d0f14;
+    --panel: #171a22;
+    --accent: #ffcf4d;
+    --accent2: #4dd0e1;
+    --danger: #ff5c5c;
+    --ok: #63e07a;
+    --text: #eef1f6;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: radial-gradient(ellipse at center, #1b1f2a 0%, #08090c 100%);
+    display:flex; align-items:center; justify-content:center;
+    font-family: 'Courier New', Courier, monospace;
+    color: var(--text);
+    -webkit-font-smoothing: none;
+  }
+  #wrap{
+    position:relative;
+    width: 960px;
+    max-width: 100vw;
+  }
+  #stage{
+    position:relative;
+    width:100%;
+    aspect-ratio: 960/540;
+    background:#000;
+    border: 4px solid #2a2f3d;
+    border-radius: 6px;
+    overflow:hidden;
+    box-shadow: 0 0 0 2px #000, 0 20px 60px rgba(0,0,0,.6);
+  }
+  canvas{
+    width:100%; height:100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    display:block;
+  }
+  #hud{
+    position:absolute; inset:0; pointer-events:none;
+    font-size: 15px;
+    text-shadow: 2px 2px 0 #000;
+  }
+  .hud-top{
+    position:absolute; top:8px; left:8px; right:8px;
+    display:flex; justify-content:space-between; align-items:flex-start;
+  }
+  .hud-box{
+    background: rgba(10,12,16,.55);
+    border: 2px solid #2a2f3d;
+    border-radius: 4px;
+    padding: 4px 8px;
+  }
+  #progressBar{
+    position:absolute; top:8px; left:50%; transform: translateX(-50%);
+    width: 300px; height: 10px;
+    background: rgba(10,12,16,.6);
+    border: 2px solid #2a2f3d;
+    border-radius: 4px;
+  }
+  #progressFill{
+    height:100%; width:0%;
+    background: linear-gradient(90deg, var(--accent2), var(--ok));
+  }
+  #progressHouse{
+    position:absolute; right:-6px; top:-6px; font-size:14px;
+  }
+  #staminaWrap{
+    position:absolute; left:8px; bottom:8px;
+    width: 160px;
+  }
+  #staminaLabel{ font-size:11px; opacity:.85; margin-bottom:2px;}
+  #staminaBar{
+    width:100%; height:10px;
+    background: rgba(10,12,16,.6);
+    border:2px solid #2a2f3d; border-radius:4px;
+    overflow:hidden;
+  }
+  #staminaFill{
+    height:100%; width:100%;
+    background: linear-gradient(90deg,#4dd0e1,#63e07a);
+    transition: width .08s linear;
+  }
+  #slowIndicator{
+    position:absolute; right:8px; bottom:8px;
+    color: var(--danger);
+    display:none;
+  }
+  .screen{
+    position:absolute; inset:0;
+    background: rgba(6,7,10,.92);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding: 20px;
+    gap: 10px;
+  }
+  .hidden{ display:none !important; }
+  .title{
+    font-size: 30px; color: var(--accent);
+    letter-spacing:1px;
+    text-shadow: 3px 3px 0 #000;
+  }
+  .subtitle{
+    font-size:14px; color:var(--accent2); max-width:640px; line-height:1.6;
+  }
+  .rules{
+    font-size:12.5px; max-width:640px; line-height:1.7; color:#cfd6e4;
+    background: rgba(255,255,255,.04);
+    border:1px solid #2a2f3d; border-radius:6px; padding:10px 14px;
+  }
+  .rules b{ color: var(--accent); }
+  button.btn{
+    font-family: inherit;
+    font-size: 16px;
+    background: var(--accent);
+    color: #201700;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 4px;
+    cursor:pointer;
+    box-shadow: 0 4px 0 #a8791f;
+    font-weight:bold;
+  }
+  button.btn:active{ box-shadow: 0 1px 0 #a8791f; transform: translateY(3px); }
+  .scoreLine{ font-size:18px; color: var(--ok); }
+  .kbd{
+    display:inline-block; border:1px solid #666; border-bottom-width:3px;
+    border-radius:4px; padding:1px 7px; font-size:11px; background:#1f232d; color:#fff;
+  }
+  #hitText{
+    position:absolute; pointer-events:none; font-size:12px; color:#fff;
+    background: rgba(0,0,0,.55); border:1px solid #444; border-radius:8px;
+    padding:3px 7px; transform: translate(-50%, -100%); white-space:nowrap;
+    display:none;
+  }
+  footer{
+    text-align:center; color:#5a6070; font-size:11px; margin-top:8px;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <canvas id="game" width="960" height="540"></canvas>
+    <div id="hud">
+      <div class="hud-top">
+        <div class="hud-box">SKÓRE: <span id="scoreVal">0</span></div>
+        <div class="hud-box">NOVINÁRI: <span id="jCount">0</span>/10</div>
+      </div>
+      <div id="progressBar"><div id="progressFill"></div><div id="progressHouse">🏠</div></div>
+      <div id="staminaWrap">
+        <div id="staminaLabel">ŠPRINT</div>
+        <div id="staminaBar"><div id="staminaFill"></div></div>
+      </div>
+      <div id="slowIndicator" class="hud-box">🐌 SPOMALENÝ</div>
+      <div id="hitText"></div>
+    </div>
+
+    <div id="startScreen" class="screen">
+      <div class="title">ÚTEK PRED NOVINÁRMI</div>
+      <div class="subtitle">Ste respondent, ktorý práve nechce nič komentovať. Utekajte z budovy na ulicu a dobehnite do bezpečia — kým vás nedobehne dav novinárov s mikrofónmi.</div>
+      <div class="rules">
+        <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> alebo <span class="kbd">WASD</span> pohyb, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž).<br><br>
+        Novinári sú pomalší ako vy, ale strieľajú po vás bubliny s otázkami. Každý zásah vás <b>spomalí</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b> — chytili vás. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
+      </div>
+      <button class="btn" id="startBtn">ŠTART (Enter)</button>
+    </div>
+
+    <div id="gameoverScreen" class="screen hidden">
+      <div class="title" style="color:var(--danger)">CHYTILI VÁS!</div>
+      <div class="subtitle">Zajtrajší titulok: „Exkluzívne: Utekal, no pravde neušiel“</div>
+      <div class="scoreLine">Skóre: <span id="goScore">0</span></div>
+      <button class="btn" id="retryBtn1">SKÚSIŤ ZNOVA (Enter)</button>
+    </div>
+
+    <div id="winScreen" class="screen hidden">
+      <div class="title" style="color:var(--ok)">UNIKLI STE!</div>
+      <div class="subtitle">Bezpečne ste sa dostali domov. Žiadny komentár dnes nebude.</div>
+      <div class="scoreLine">Skóre: <span id="winScore">0</span></div>
+      <button class="btn" id="retryBtn2">HRAŤ ZNOVA (Enter)</button>
+    </div>
+  </div>
+  <footer>Útek pred novinármi — jednoduchá 2D unikačka. Pixel-art, canvas, vanilla JS.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Setup ----------
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const W = canvas.width, H = canvas.height;
+
+  const startScreen = document.getElementById('startScreen');
+  const gameoverScreen = document.getElementById('gameoverScreen');
+  const winScreen = document.getElementById('winScreen');
+  const scoreVal = document.getElementById('scoreVal');
+  const jCountEl = document.getElementById('jCount');
+  const progressFill = document.getElementById('progressFill');
+  const staminaFill = document.getElementById('staminaFill');
+  const slowIndicator = document.getElementById('slowIndicator');
+  const hitTextEl = document.getElementById('hitText');
+  const goScore = document.getElementById('goScore');
+  const winScore = document.getElementById('winScore');
+
+  // ---------- World constants ----------
+  const WORLD_LENGTH = 7000;
+  const BUILDING_END = 2200;      // interior -> doorway
+  const DOORWAY_END = 2380;       // doorway -> street
+  const SAFEHOUSE_START = WORLD_LENGTH - 480;
+  const FINISH_X = WORLD_LENGTH - 140;
+
+  const TOP_BOUND = 90;
+  const BOTTOM_BOUND = 470;
+
+  const PLAYER_BASE_SPEED = 215;
+  const PLAYER_SPRINT_SPEED = 335;
+  const STAMINA_MAX = 100;
+  const STAMINA_DRAIN = 42;
+  const STAMINA_REGEN = 24;
+
+  const JOURNALIST_BASE_SPEED = 118;
+  const CATCH_RADIUS = 27;
+  const SHOOT_RANGE = 420;
+  const BUBBLE_SPEED = 260;
+  const HIT_RADIUS = 24;
+  const MAX_JOURNALISTS = 10;
+
+  const QUESTIONS = [
+    "Prečo unikáte?",
+    "Prečo nám nechcete odpovedať?",
+    "Máte čo skrývať?",
+    "Aké je vaše stanovisko?",
+    "Budete to komentovať?",
+    "Čo na to poviete?",
+    "Len jednu otázku!",
+    "Kedy sa vyjadríte?"
+  ];
+
+  // ---------- Input ----------
+  const keys = {};
+  window.addEventListener('keydown', (e) => {
+    if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space"].includes(e.code)) e.preventDefault();
+    keys[e.code] = true;
+    if (e.code === 'Enter') {
+      if (!startScreen.classList.contains('hidden')) startGame();
+      else if (!gameoverScreen.classList.contains('hidden')) startGame();
+      else if (!winScreen.classList.contains('hidden')) startGame();
+    }
+  }, {passive:false});
+  window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('retryBtn1').addEventListener('click', startGame);
+  document.getElementById('retryBtn2').addEventListener('click', startGame);
+
+  // ---------- Game state ----------
+  let state = null;
+
+  function freshState(){
+    return {
+      status: 'start', // start | playing | gameover | win
+      camX: 0,
+      elapsed: 0,
+      score: 0,
+      spawnTimer: 1.2,
+      nextId: 1,
+      shake: 0,
+      player: {
+        x: 120, y: 280, facing: 1,
+        stamina: STAMINA_MAX, sprinting: false,
+        slowStacks: [], animT: 0, animFrame: 0,
+        hitFlash: 0, lastHitText: '', hitTextT: 0
+      },
+      journalists: [],
+      bubbles: []
+    };
+  }
+
+  function startGame(){
+    state = freshState();
+    state.status = 'playing';
+    startScreen.classList.add('hidden');
+    gameoverScreen.classList.add('hidden');
+    winScreen.classList.add('hidden');
+  }
+
+  function speedMultiplier(p, now){
+    p.slowStacks = p.slowStacks.filter(exp => exp > now);
+    const n = p.slowStacks.length;
+    if (n === 0) return 1;
+    return Math.max(0.32, Math.pow(0.86, n));
+  }
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function spawnJournalist(st){
+    const behind = Math.random() < 0.78;
+    let sx;
+    if (behind) sx = st.camX - rand(60, 280);
+    else sx = st.camX + W + rand(30, 160);
+    sx = Math.max(20, sx);
+    const sy = rand(TOP_BOUND, BOTTOM_BOUND);
+    st.journalists.push({
+      id: st.nextId++, x: sx, y: sy,
+      speed: JOURNALIST_BASE_SPEED * rand(0.85, 1.2),
+      shootCooldown: rand(0.6, 2.2),
+      animT: Math.random()*10, animFrame: 0,
+      hue: Math.random()
+    });
+  }
+
+  function endGame(status){
+    state.status = status;
+    if (status === 'gameover'){
+      goScore.textContent = state.score;
+      gameoverScreen.classList.remove('hidden');
+    } else if (status === 'win'){
+      winScore.textContent = state.score;
+      winScreen.classList.remove('hidden');
+    }
+  }
+
+  // ---------- Update ----------
+  function update(dt){
+    const st = state;
+    if (st.status !== 'playing') return;
+
+    const now = performance.now()/1000;
+    const p = st.player;
+
+    let mx = 0, my = 0;
+    if (keys.ArrowLeft || keys.KeyA) mx -= 1;
+    if (keys.ArrowRight || keys.KeyD) mx += 1;
+    if (keys.ArrowUp || keys.KeyW) my -= 1;
+    if (keys.ArrowDown || keys.KeyS) my += 1;
+    if (mx !== 0 && my !== 0){ mx *= 0.7071; my *= 0.7071; }
+    if (mx !== 0) p.facing = mx > 0 ? 1 : -1;
+
+    const wantSprint = !!keys.Space && p.stamina > 0;
+    p.sprinting = wantSprint;
+    if (wantSprint){
+      p.stamina = Math.max(0, p.stamina - STAMINA_DRAIN*dt);
+    } else {
+      p.stamina = Math.min(STAMINA_MAX, p.stamina + STAMINA_REGEN*dt);
+    }
+
+    const baseSpeed = p.sprinting ? PLAYER_SPRINT_SPEED : PLAYER_BASE_SPEED;
+    const mult = speedMultiplier(p, now);
+    const eff = baseSpeed * mult;
+
+    p.x += mx * eff * dt;
+    p.y += my * eff * dt;
+    p.x = Math.max(20, Math.min(WORLD_LENGTH - 20, p.x));
+    p.y = Math.max(TOP_BOUND, Math.min(BOTTOM_BOUND, p.y));
+
+    if (mx !== 0 || my !== 0){
+      p.animT += dt * (p.sprinting ? 12 : 8);
+      p.animFrame = Math.floor(p.animT) % 2;
+    }
+    if (p.hitFlash > 0) p.hitFlash -= dt;
+    if (p.hitTextT > 0) p.hitTextT -= dt;
+
+    // camera
+    st.camX = Math.max(0, Math.min(WORLD_LENGTH - W, p.x - W*0.35));
+    if (st.shake > 0) st.shake -= dt;
+
+    // spawn journalists
+    st.spawnTimer -= dt;
+    if (st.spawnTimer <= 0 && st.journalists.length < MAX_JOURNALISTS){
+      spawnJournalist(st);
+      const ramp = Math.min(st.elapsed/45, 1);
+      st.spawnTimer = rand(2.6 - ramp*1.3, 3.6 - ramp*1.6);
+    }
+
+    // journalists update
+    for (const j of st.journalists){
+      const dx = p.x - j.x, dy = p.y - j.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const nx = dx/dist, ny = dy/dist;
+      j.x += nx * j.speed * dt;
+      j.y += ny * j.speed * dt;
+      j.y = Math.max(TOP_BOUND, Math.min(BOTTOM_BOUND, j.y));
+      j.animT += dt * 6;
+      j.animFrame = Math.floor(j.animT) % 2;
+      j.facing = dx >= 0 ? 1 : -1;
+
+      j.shootCooldown -= dt;
+      if (dist < SHOOT_RANGE && j.shootCooldown <= 0){
+        const bdx = p.x - j.x, bdy = p.y - j.y;
+        const bd = Math.hypot(bdx,bdy) || 1;
+        st.bubbles.push({
+          x: j.x, y: j.y - 18,
+          vx: (bdx/bd) * BUBBLE_SPEED, vy: (bdy/bd) * BUBBLE_SPEED,
+          text: QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)],
+          life: 2.2
+        });
+        j.shootCooldown = rand(1.8, 3.3);
+      }
+
+      if (dist < CATCH_RADIUS){
+        endGame('gameover');
+        return;
+      }
+    }
+
+    // bubbles update
+    for (let i = st.bubbles.length - 1; i >= 0; i--){
+      const b = st.bubbles[i];
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+      const dist = Math.hypot(p.x - b.x, p.y - b.y);
+      if (dist < HIT_RADIUS){
+        p.slowStacks.push(now + 3.0);
+        if (p.slowStacks.length > 6) p.slowStacks.shift();
+        p.hitFlash = 0.35;
+        p.lastHitText = b.text;
+        p.hitTextT = 1.4;
+        st.shake = 0.25;
+        st.bubbles.splice(i,1);
+        continue;
+      }
+      if (b.life <= 0) st.bubbles.splice(i,1);
+    }
+
+    // score & win
+    st.elapsed += dt;
+    st.score = Math.floor(st.elapsed * 10);
+
+    if (p.x >= FINISH_X){
+      st.score += 500;
+      endGame('win');
+    }
+  }
+
+  // ---------- Background drawing ----------
+  function segmentAt(worldX){
+    if (worldX < BUILDING_END) return 'interior';
+    if (worldX < DOORWAY_END) return 'doorway';
+    return 'street';
+  }
+
+  function drawSky(camX){
+    // parallax sky gradient shared
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0, '#1c2740');
+    grad.addColorStop(1, '#3a4a68');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function drawInterior(camX){
+    // wall
+    ctx.fillStyle = '#3a3226';
+    ctx.fillRect(0,0,W,H*0.62);
+    // wall trim
+    ctx.fillStyle = '#2a2419';
+    ctx.fillRect(0,H*0.55,W,10);
+    // floor
+    const floorGrad = ctx.createLinearGradient(0,H*0.62,0,H);
+    floorGrad.addColorStop(0,'#7a5b3a');
+    floorGrad.addColorStop(1,'#57402a');
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(0,H*0.62,W,H*0.38);
+
+    // floor planks
+    ctx.strokeStyle = 'rgba(0,0,0,.15)';
+    ctx.lineWidth = 2;
+    const plankSpacing = 60;
+    let startX = Math.floor(camX/plankSpacing)*plankSpacing;
+    for (let wx = startX; wx < camX + W + plankSpacing; wx += plankSpacing){
+      const sx = wx - camX;
+      ctx.beginPath(); ctx.moveTo(sx, H*0.62); ctx.lineTo(sx, H); ctx.stroke();
+    }
+
+    // windows
+    const winSpacing = 300;
+    startX = Math.floor(camX/winSpacing)*winSpacing;
+    for (let wx = startX; wx < camX + W + winSpacing; wx += winSpacing){
+      if (wx > BUILDING_END - 60) continue;
+      const sx = wx - camX;
+      drawWindow(sx, 60);
+    }
+
+    // desks / office props
+    const deskSpacing = 420;
+    startX = Math.floor(camX/deskSpacing)*deskSpacing;
+    for (let wx = startX; wx < camX + W + deskSpacing; wx += deskSpacing){
+      if (wx > BUILDING_END - 40) continue;
+      const sx = wx - camX + 140;
+      drawDesk(sx, H*0.62);
+    }
+
+    // exit doorway marker near BUILDING_END
+    if (BUILDING_END - camX > -200 && BUILDING_END - camX < W + 200){
+      drawExitDoor(BUILDING_END - camX);
+    }
+  }
+
+  function drawWindow(sx, sy){
+    ctx.fillStyle = '#1a2233';
+    ctx.fillRect(sx, sy, 90, 110);
+    ctx.fillStyle = '#8fb8e0';
+    ctx.fillRect(sx+8, sy+8, 74, 94);
+    ctx.strokeStyle = '#1a2233';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(sx+45, sy+8); ctx.lineTo(sx+45, sy+102);
+    ctx.moveTo(sx+8, sy+55); ctx.lineTo(sx+82, sy+55);
+    ctx.stroke();
+  }
+
+  function drawDesk(sx, floorY){
+    const dw=110, dh=46;
+    const sy = floorY - dh + 6;
+    ctx.fillStyle = '#4a3520';
+    ctx.fillRect(sx, sy, dw, dh);
+    ctx.fillStyle = '#2f2113';
+    ctx.fillRect(sx, sy, dw, 8);
+    // monitor
+    ctx.fillStyle = '#222';
+    ctx.fillRect(sx+dw*0.36, sy-26, 34, 24);
+    ctx.fillStyle = '#4dd0e1';
+    ctx.fillRect(sx+dw*0.36+3, sy-23, 28, 18);
+  }
+
+  function drawExitDoor(sx){
+    ctx.fillStyle = '#5c3b1e';
+    ctx.fillRect(sx-30, H*0.30, 60, H*0.62-6-H*0.30+6);
+    ctx.fillStyle = '#ffd873';
+    ctx.fillRect(sx-24, H*0.34, 48, 20);
+    ctx.fillStyle = '#3a2510';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.fillText('VÝCHOD', sx, H*0.30-8);
+  }
+
+  function drawStreet(camX){
+    // distant skyline (parallax)
+    ctx.fillStyle = '#232c42';
+    const skySpacing = 220;
+    let startX = Math.floor((camX*0.4)/skySpacing)*skySpacing;
+    for (let wx = startX; wx < camX*0.4 + W + skySpacing; wx += skySpacing){
+      const sx = wx - camX*0.4;
+      const h = 90 + ((wx/71)%5)*30;
+      ctx.fillRect(sx, H*0.55-h, 140, h);
+    }
+
+    // road
+    ctx.fillStyle = '#3a3d42';
+    ctx.fillRect(0, H*0.62, W, H*0.38);
+    ctx.fillStyle = '#2c2f33';
+    ctx.fillRect(0, H*0.62, W, 10);
+
+    // lane markings
+    ctx.fillStyle = '#e8d24a';
+    const dashSpacing = 90;
+    startX = Math.floor(camX/dashSpacing)*dashSpacing;
+    for (let wx = startX; wx < camX + W + dashSpacing; wx += dashSpacing){
+      const sx = wx - camX;
+      ctx.fillRect(sx, H*0.80, 46, 6);
+    }
+
+    // buildings row (closer, mid parallax)
+    const bSpacing = 260;
+    startX = Math.floor(camX/bSpacing)*bSpacing;
+    for (let wx = startX; wx < camX + W + bSpacing; wx += bSpacing){
+      if (wx >= SAFEHOUSE_START - 40) continue;
+      const sx = wx - camX;
+      const seed = Math.floor(wx/bSpacing);
+      drawStreetBuilding(sx, seed);
+    }
+
+    // lampposts
+    const lampSpacing = 340;
+    startX = Math.floor(camX/lampSpacing)*lampSpacing;
+    for (let wx = startX; wx < camX + W + lampSpacing; wx += lampSpacing){
+      const sx = wx - camX + 60;
+      drawLamp(sx);
+    }
+
+    // safe house
+    drawSafeHouse(camX);
+  }
+
+  function drawStreetBuilding(sx, seed){
+    const colors = ['#3d4b5c','#4a3d52','#3d5245','#524a3d'];
+    const col = colors[seed % colors.length];
+    const h = 160 + (seed%4)*36;
+    const topY = H*0.62 - h;
+    ctx.fillStyle = col;
+    ctx.fillRect(sx, topY, 220, h);
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.fillRect(sx, topY, 220, 10);
+    // windows grid
+    ctx.fillStyle = '#ffdf87';
+    for (let r=0; r<Math.floor(h/34); r++){
+      for (let c=0; c<5; c++){
+        if ((r+c+seed) % 3 === 0) continue;
+        ctx.fillRect(sx+14+c*40, topY+14+r*34, 20, 20);
+      }
+    }
+  }
+
+  function drawLamp(sx){
+    const floorY = H*0.62;
+    ctx.fillStyle = '#1f2226';
+    ctx.fillRect(sx-3, floorY-140, 6, 140);
+    ctx.fillStyle = '#ffe9a8';
+    ctx.beginPath();
+    ctx.arc(sx, floorY-146, 10, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,230,168,.15)';
+    ctx.beginPath();
+    ctx.arc(sx, floorY-146, 34, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawSafeHouse(camX){
+    const hx = SAFEHOUSE_START - camX;
+    if (hx > W + 300 || hx < -400) return;
+    const floorY = H*0.62;
+    const houseW = 320, houseH = 220;
+    const bx = hx + 40;
+    const by = floorY - houseH;
+    // glow
+    const glow = ctx.createRadialGradient(bx+houseW/2, by+houseH/2, 20, bx+houseW/2, by+houseH/2, 260);
+    glow.addColorStop(0, 'rgba(99,224,122,.28)');
+    glow.addColorStop(1, 'rgba(99,224,122,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(bx-260, by-260, houseW+520, houseH+520);
+    // body
+    ctx.fillStyle = '#e7dcc0';
+    ctx.fillRect(bx, by+70, houseW, houseH-70);
+    // roof
+    ctx.fillStyle = '#7a2f2f';
+    ctx.beginPath();
+    ctx.moveTo(bx-20, by+70);
+    ctx.lineTo(bx+houseW/2, by-30);
+    ctx.lineTo(bx+houseW+20, by+70);
+    ctx.closePath();
+    ctx.fill();
+    // door
+    ctx.fillStyle = '#2f9e52';
+    ctx.fillRect(bx+houseW/2-32, by+houseH-100, 64, 100);
+    ctx.fillStyle = '#e7dcc0';
+    ctx.beginPath();
+    ctx.arc(bx+houseW/2-24, by+houseH-52, 4, 0, Math.PI*2);
+    ctx.fill();
+    // windows
+    ctx.fillStyle = '#8fd6e8';
+    ctx.fillRect(bx+30, by+110, 44, 44);
+    ctx.fillRect(bx+houseW-74, by+110, 44, 44);
+    // sign
+    ctx.fillStyle = '#123';
+    ctx.font = 'bold 15px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#eafff0';
+    ctx.fillText('BEZPEČNÝ DOM', bx+houseW/2, by-42);
+  }
+
+  // ---------- Character drawing (blocky pixel-art) ----------
+  function drawCharacter(sx, sy, opts){
+    // sx,sy = feet position (ground contact point)
+    const facing = opts.facing || 1;
+    const frame = opts.frame || 0;
+    const jacket = opts.jacket;
+    const skin = '#e8b48a';
+    const hair = opts.hair || '#4a3222';
+    const pants = '#2b2b2b';
+    const shoes = '#151515';
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(facing, 1);
+
+    // legs
+    ctx.fillStyle = pants;
+    if (frame === 1){
+      ctx.fillRect(-11, -20, 8, 16);
+      ctx.fillRect(3, -20, 8, 20);
+    } else {
+      ctx.fillRect(-9, -20, 8, 20);
+      ctx.fillRect(1, -20, 8, 16);
+    }
+    // shoes
+    ctx.fillStyle = shoes;
+    if (frame === 1){
+      ctx.fillRect(-13, -6, 10, 6);
+      ctx.fillRect(3, -6, 10, 6);
+    } else {
+      ctx.fillRect(-11, -6, 10, 6);
+      ctx.fillRect(1, -6, 10, 6);
+    }
+    // torso
+    ctx.fillStyle = jacket;
+    ctx.fillRect(-12, -46, 24, 28);
+    // arms
+    ctx.fillStyle = jacket;
+    const armSwing = frame === 1 ? 3 : -3;
+    ctx.fillRect(-16, -44+armSwing, 6, 18);
+    ctx.fillRect(10, -44-armSwing, 6, 18);
+    ctx.fillStyle = skin;
+    ctx.fillRect(-16, -28+armSwing, 6, 6);
+    ctx.fillRect(10, -28-armSwing, 6, 6);
+    // neck+head
+    ctx.fillStyle = skin;
+    ctx.fillRect(-6, -52, 12, 8);
+    ctx.fillRect(-11, -70, 22, 20);
+    // hair
+    ctx.fillStyle = hair;
+    ctx.fillRect(-12, -72, 24, 8);
+    ctx.fillRect(-12, -66, 5, 12);
+    // eye
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(4, -62, 3, 3);
+
+    if (opts.press){
+      // press badge / notepad
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-6, -40, 10, 12);
+      ctx.fillStyle = '#c0392b';
+      ctx.fillRect(-6, -40, 10, 3);
+      // mic
+      ctx.fillStyle = '#222';
+      ctx.fillRect(12, -30, 10, 4);
+      ctx.beginPath();
+      ctx.fillStyle = '#111';
+      ctx.arc(24, -28, 4, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    if (opts.hitFlash > 0){
+      ctx.globalAlpha = Math.min(0.6, opts.hitFlash);
+      ctx.fillStyle = '#ff3b3b';
+      ctx.fillRect(-16, -74, 34, 70);
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.restore();
+  }
+
+  function drawBubble(sx, sy, text){
+    ctx.font = 'bold 11px monospace';
+    const padX = 6, padY = 4;
+    const tw = ctx.measureText(text).width;
+    const bw = tw + padX*2, bh = 16 + padY;
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.5;
+    roundRect(sx-bw/2, sy-bh/2, bw, bh, 6);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#111';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, sx, sy+1);
+  }
+
+  function roundRect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  // ---------- Render ----------
+  function render(){
+    const st = state;
+    ctx.clearRect(0,0,W,H);
+
+    if (!st){ return; }
+
+    let shakeX = 0, shakeY = 0;
+    if (st.shake > 0){
+      shakeX = (Math.random()-0.5) * 8 * st.shake;
+      shakeY = (Math.random()-0.5) * 6 * st.shake;
+    }
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+
+    drawSky(st.camX);
+    // draw based on visible window: interior, street, or both near the transition
+    if (st.camX + W < BUILDING_END + 40){
+      drawInterior(st.camX);
+    } else if (st.camX > DOORWAY_END){
+      drawStreet(st.camX);
+    } else {
+      drawInterior(st.camX);
+      drawStreet(st.camX);
+    }
+
+    // journalists (draw back-to-front by y for pseudo depth)
+    const sortedJ = st.journalists.slice().sort((a,b)=>a.y-b.y);
+    for (const j of sortedJ){
+      const sx = j.x - st.camX;
+      if (sx < -60 || sx > W+60) continue;
+      drawCharacter(sx, j.y, {facing: j.facing||1, frame: j.animFrame, jacket:'#57606e', hair:'#2a2a2a', press:true});
+    }
+
+    // bubbles
+    for (const b of st.bubbles){
+      const sx = b.x - st.camX, sy = b.y;
+      if (sx < -80 || sx > W+80) continue;
+      drawBubble(sx, sy, b.text);
+    }
+
+    // player
+    const p = st.player;
+    const psx = p.x - st.camX;
+    drawCharacter(psx, p.y, {facing:p.facing, frame:p.animFrame, jacket:'#2f6fb0', hair:'#3a2a1a', hitFlash:p.hitFlash});
+
+    ctx.restore();
+
+    // hit text (screen space, outside shake)
+    if (p.hitTextT > 0){
+      hitTextEl.style.display = 'block';
+      hitTextEl.style.left = (psx / W * 100) + '%';
+      hitTextEl.style.top = ((p.y-80) / H * 100) + '%';
+      hitTextEl.textContent = p.lastHitText;
+    } else {
+      hitTextEl.style.display = 'none';
+    }
+  }
+
+  function updateHUD(){
+    const st = state;
+    if (!st) return;
+    scoreVal.textContent = st.score;
+    jCountEl.textContent = st.journalists.length;
+    const pct = Math.max(0, Math.min(100, (st.player.x / FINISH_X) * 100));
+    progressFill.style.width = pct + '%';
+    staminaFill.style.width = st.player.stamina + '%';
+    slowIndicator.style.display = st.player.slowStacks.length > 0 ? 'block' : 'none';
+  }
+
+  // ---------- Main loop ----------
+  let lastT = performance.now();
+  function loop(t){
+    const dt = Math.min(0.05, (t - lastT) / 1000);
+    lastT = t;
+    if (state && state.status === 'playing'){
+      update(dt);
+    }
+    render();
+    updateHUD();
+    requestAnimationFrame(loop);
+  }
+
+  // initial idle render (start screen background preview)
+  state = freshState();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
