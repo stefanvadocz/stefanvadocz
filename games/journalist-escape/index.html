@@ -232,14 +232,14 @@
       <div class="subtitle">Ste respondent, ktorý práve nechce nič komentovať. Utekajte z budovy na ulicu a dobehnite do bezpečia — kým vás nedobehne dav novinárov s mikrofónmi.</div>
       <div class="rules">
         <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span> alebo <span class="kbd">A</span><span class="kbd">D</span> beh, <span class="kbd">↑</span>/<span class="kbd">W</span> <b>skok</b> cez prekážky, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž). Na mobile sa ovláda dotykovými tlačidlami na obrazovke.<br><br>
-        Postavička beží <b>len po zemi</b> — v miestnosti po podlahe, na ulici po ceste. Prekážky preskočíte skokom: v interiéri <b>počítače, prázdne fľaše a stoličky</b>, na ulici <b>autá, smetné koše a dlažobné kocky</b>. Cez <b>dvere</b> prejdete z budovy rovno na ulicu. Novinári sú spočiatku pomalší ako vy, no časom <b>zrýchľujú</b> a strieľajú <b>čoraz častejšie</b> bubliny s otázkami. Každý zásah vás <b>výrazne spomalí</b> a obrazovka na chvíľu <b>blikne</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b>. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
+        Postavička beží <b>len po zemi</b> — v miestnosti po podlahe, na ulici po ceste. Prekážky preskočíte skokom: v interiéri <b>počítače, prázdne fľaše a stoličky</b>, na ulici <b>autá, smetné koše a dlažobné kocky</b>. Cez <b>dvere</b> prejdete z budovy rovno na ulicu. Vysokým skokom preskočíte aj <b>samotného novinára</b>, ktorý vás dobieha. Novinári sú spočiatku pomalší ako vy, no časom <b>zrýchľujú</b> a strieľajú <b>čoraz častejšie</b> bubliny s otázkami. Každý zásah vás <b>výrazne spomalí</b> a obrazovka na chvíľu <b>blikne</b>. Ak sa vás niektorý novinár dotkne (a nepreskočíte ho), <b>prehrali ste</b>. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
       </div>
       <button class="btn" id="startBtn">ŠTART (Enter)</button>
     </div>
 
     <div id="gameoverScreen" class="screen hidden">
       <div class="title" style="color:var(--danger)">CHYTILI VÁS!</div>
-      <div class="subtitle">Zajtrajší titulok: „Exkluzívne: Utekal, no pravde neušiel“</div>
+      <div class="subtitle">Zajtrajší titulok: „Mediálny lynč: Utekal, no pravde neušiel“</div>
       <div class="scoreLine">Skóre: <span id="goScore">0</span></div>
       <button class="btn" id="retryBtn1">SKÚSIŤ ZNOVA (Enter)</button>
     </div>
@@ -292,6 +292,7 @@
 
   const JOURNALIST_BASE_SPEED = 130;
   const CATCH_RADIUS = 27;
+  const JOURNALIST_CLEAR_HEIGHT = 55; // jump this high to leap clean over a journalist and dodge the catch
   const SHOOT_RANGE = 420;
   const BUBBLE_SPEED = 260;
   const HIT_RADIUS = 24;
@@ -300,10 +301,10 @@
 
   // basic jump physics
   const GRAVITY = 1600;
-  const JUMP_IMPULSE = 430;
+  const JUMP_IMPULSE = 560; // higher hop — clears every obstacle with room to spare and can clear a journalist too
 
   // obstacles (deterministic, procedurally placed along the route — no extra state needed)
-  const OBSTACLE_SPACING = 240;
+  const OBSTACLE_SPACING = 340;
   const OBSTACLE_SAFE_START = 350;                 // no obstacles right after spawn
   const OBSTACLE_DOOR_GAP = [DOOR_X - 100, DOOR_X + 100]; // clear space around the door
   const OBSTACLE_SAFE_END = SAFEHOUSE_START - 120; // clear run into the safe house
@@ -329,7 +330,7 @@
     if (wx < OBSTACLE_SAFE_START) return null;
     if (wx > OBSTACLE_SAFE_END) return null;
     if (wx > OBSTACLE_DOOR_GAP[0] && wx < OBSTACLE_DOOR_GAP[1]) return null;
-    if (hash01(tileIndex + 0.71) > 0.62) return null; // gaps to keep it fair
+    if (hash01(tileIndex + 0.71) > 0.35) return null; // mostly gaps — obstacles are the exception, not the rule
     const list = wx < DOOR_X ? INTERIOR_OBSTACLES : STREET_OBSTACLES;
     const typeIdx = Math.floor(hash01(tileIndex + 0.13) * list.length) % list.length;
     return { x: wx, type: list[typeIdx] };
@@ -585,7 +586,7 @@
         j.shootCooldown = rand(lerp(1.8, 0.7, ramp), lerp(3.3, 1.4, ramp));
       }
 
-      if (dist < CATCH_RADIUS){
+      if (dist < CATCH_RADIUS && p.jumpOffset < JOURNALIST_CLEAR_HEIGHT){
         endGame('gameover');
         return;
       }
