@@ -132,6 +132,7 @@
     cursor:pointer;
     box-shadow: 0 4px 0 #a8791f;
     font-weight:bold;
+    touch-action: manipulation;
   }
   button.btn:active{ box-shadow: 0 1px 0 #a8791f; transform: translateY(3px); }
   .scoreLine{ font-size:18px; color: var(--ok); }
@@ -358,9 +359,25 @@
   }, {passive:false});
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-  document.getElementById('startBtn').addEventListener('click', startGame);
-  document.getElementById('retryBtn1').addEventListener('click', startGame);
-  document.getElementById('retryBtn2').addEventListener('click', startGame);
+  function bindTap(el, handler){
+    if (!el) return;
+    // Different mobile browsers/webviews reliably fire different subsets of these
+    // (plain touch events with no synthesized pointer/click is common), so all three
+    // are wired independently with a debounce to collapse duplicates from the same tap.
+    let lastFired = -Infinity;
+    const fire = () => {
+      const now = performance.now();
+      if (now - lastFired < 400) return;
+      lastFired = now;
+      handler();
+    };
+    el.addEventListener('touchend', (e) => { e.preventDefault(); fire(); }, {passive:false});
+    el.addEventListener('pointerup', (e) => { e.preventDefault(); fire(); }, {passive:false});
+    el.addEventListener('click', fire);
+  }
+  bindTap(document.getElementById('startBtn'), startGame);
+  bindTap(document.getElementById('retryBtn1'), startGame);
+  bindTap(document.getElementById('retryBtn2'), startGame);
 
   function bindTouchButton(el, code){
     if (!el) return;
