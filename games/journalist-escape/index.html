@@ -167,8 +167,8 @@
       <div class="title">ÚTEK PRED NOVINÁRMI</div>
       <div class="subtitle">Ste respondent, ktorý práve nechce nič komentovať. Utekajte z budovy na ulicu a dobehnite do bezpečia — kým vás nedobehne dav novinárov s mikrofónmi.</div>
       <div class="rules">
-        <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> alebo <span class="kbd">WASD</span> pohyb, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž).<br><br>
-        Novinári sú pomalší ako vy, ale strieľajú po vás bubliny s otázkami. Každý zásah vás <b>spomalí</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b> — chytili vás. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
+        <b>Ovládanie:</b> <span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> alebo <span class="kbd">WASD</span> pohyb, <span class="kbd">↑</span>/<span class="kbd">W</span> aj <b>skok</b> cez nízke prekážky, podržte <span class="kbd">MEDZERNÍK</span> pre šprint (minie výdrž).<br><br>
+        V ceste sú <b>prekážky</b> — debny, kužele a koše preskočíte, no skrine a lavičky musíte obehnúť. Novinári sú spočiatku pomalší ako vy, no časom <b>zrýchľujú</b> a strieľajú <b>čoraz častejšie</b> bubliny s otázkami. Každý zásah vás <b>výrazne spomalí</b> a obrazovka na chvíľu <b>blikne</b>. Ak sa vás niektorý novinár dotkne, <b>prehrali ste</b> — chytili vás. Dobehnite do <b>bezpečného domu</b> na konci ulice a <b>vyhráte</b>. Body získavate za každú prežitú sekundu.
       </div>
       <button class="btn" id="startBtn">ŠTART (Enter)</button>
     </div>
@@ -228,12 +228,47 @@
   const STAMINA_DRAIN = 42;
   const STAMINA_REGEN = 24;
 
-  const JOURNALIST_BASE_SPEED = 118;
+  const JOURNALIST_BASE_SPEED = 130;
   const CATCH_RADIUS = 27;
   const SHOOT_RANGE = 420;
   const BUBBLE_SPEED = 260;
   const HIT_RADIUS = 24;
   const MAX_JOURNALISTS = 10;
+  const DIFFICULTY_RAMP_TIME = 50; // seconds to reach full ramp-up
+
+  // basic jump physics
+  const GRAVITY = 1600;
+  const JUMP_IMPULSE = 430;
+
+  // obstacles (deterministic, procedurally placed along the route)
+  const OBSTACLE_SPACING = 240;
+  const OBSTACLE_SAFE_START = 350;       // no obstacles right after spawn
+  const OBSTACLE_DOOR_GAP = [BUILDING_END - 90, DOORWAY_END + 90]; // clear the doorway
+  const OBSTACLE_SAFE_END = SAFEHOUSE_START - 120; // clear run into the safe house
+  const OBSTACLE_TYPES = [
+    { key:'crate', w:44, h:34, jumpable:true, clearHeight:26, color:'#8a6a3a' },
+    { key:'cone',  w:26, h:38, jumpable:true, clearHeight:30, color:'#e0632c' },
+    { key:'bin',   w:34, h:42, jumpable:true, clearHeight:34, color:'#4a5560' },
+    { key:'cabinet', w:40, h:70, jumpable:false, clearHeight:Infinity, color:'#5a4a35' },
+    { key:'bench', w:70, h:36, jumpable:false, clearHeight:Infinity, color:'#6b4a2e' }
+  ];
+
+  function hash01(n){
+    const x = Math.sin(n*12.9898)*43758.5453;
+    return x - Math.floor(x);
+  }
+
+  function obstacleAt(tileIndex){
+    const wx = tileIndex * OBSTACLE_SPACING;
+    if (wx < OBSTACLE_SAFE_START) return null;
+    if (wx > OBSTACLE_SAFE_END) return null;
+    if (wx > OBSTACLE_DOOR_GAP[0] && wx < OBSTACLE_DOOR_GAP[1]) return null;
+    if (hash01(tileIndex + 0.71) > 0.6) return null; // gaps to keep it fair
+    const typeIdx = Math.floor(hash01(tileIndex + 0.13) * OBSTACLE_TYPES.length) % OBSTACLE_TYPES.length;
+    const type = OBSTACLE_TYPES[typeIdx];
+    const y = TOP_BOUND + hash01(tileIndex + 0.59) * (BOTTOM_BOUND - TOP_BOUND);
+    return { x: wx, y, type };
+  }
 
   const QUESTIONS = [
     "Prečo unikáte?",
@@ -275,11 +310,14 @@
       spawnTimer: 1.2,
       nextId: 1,
       shake: 0,
+      flashTimer: 0,
       player: {
         x: 120, y: 280, facing: 1,
         stamina: STAMINA_MAX, sprinting: false,
         slowStacks: [], animT: 0, animFrame: 0,
-        hitFlash: 0, lastHitText: '', hitTextT: 0
+        hitFlash: 0, lastHitText: '', hitTextT: 0,
+        jumpVel: 0, jumpOffset: 0, grounded: true, jumpKeyLatch: false,
+        stunTimer: 0, bumpFlash: 0
       },
       journalists: [],
       bubbles: []
@@ -297,11 +335,17 @@
   function speedMultiplier(p, now){
     p.slowStacks = p.slowStacks.filter(exp => exp > now);
     const n = p.slowStacks.length;
-    if (n === 0) return 1;
-    return Math.max(0.32, Math.pow(0.86, n));
+    let mult = n === 0 ? 1 : Math.max(0.18, Math.pow(0.68, n));
+    if (p.stunTimer > 0) mult *= 0.25;
+    return mult;
+  }
+
+  function difficultyRamp(elapsed){
+    return Math.min(elapsed / DIFFICULTY_RAMP_TIME, 1);
   }
 
   function rand(a,b){ return a + Math.random()*(b-a); }
+  function lerp(a,b,t){ return a + (b-a)*t; }
 
   function spawnJournalist(st){
     const behind = Math.random() < 0.78;
@@ -312,8 +356,8 @@
     const sy = rand(TOP_BOUND, BOTTOM_BOUND);
     st.journalists.push({
       id: st.nextId++, x: sx, y: sy,
-      speed: JOURNALIST_BASE_SPEED * rand(0.85, 1.2),
-      shootCooldown: rand(0.6, 2.2),
+      speedFactor: rand(0.85, 1.2),
+      shootCooldown: rand(0.6, 1.8),
       animT: Math.random()*10, animFrame: 0,
       hue: Math.random()
     });
@@ -346,6 +390,23 @@
     if (mx !== 0 && my !== 0){ mx *= 0.7071; my *= 0.7071; }
     if (mx !== 0) p.facing = mx > 0 ? 1 : -1;
 
+    // jump (edge-triggered hop with basic gravity, used to clear low obstacles)
+    const jumpKeyDown = !!(keys.ArrowUp || keys.KeyW);
+    if (jumpKeyDown && !p.jumpKeyLatch && p.grounded){
+      p.jumpVel = JUMP_IMPULSE;
+      p.grounded = false;
+    }
+    p.jumpKeyLatch = jumpKeyDown;
+    if (!p.grounded){
+      p.jumpVel -= GRAVITY * dt;
+      p.jumpOffset += p.jumpVel * dt;
+      if (p.jumpOffset <= 0){
+        p.jumpOffset = 0;
+        p.jumpVel = 0;
+        p.grounded = true;
+      }
+    }
+
     const wantSprint = !!keys.Space && p.stamina > 0;
     p.sprinting = wantSprint;
     if (wantSprint){
@@ -358,10 +419,27 @@
     const mult = speedMultiplier(p, now);
     const eff = baseSpeed * mult;
 
+    const prevX = p.x;
     p.x += mx * eff * dt;
     p.y += my * eff * dt;
     p.x = Math.max(20, Math.min(WORLD_LENGTH - 20, p.x));
     p.y = Math.max(TOP_BOUND, Math.min(BOTTOM_BOUND, p.y));
+
+    // obstacle collision (basic physics: solid wall unless jumped high enough)
+    const firstTile = Math.floor((p.x - 200) / OBSTACLE_SPACING);
+    const lastTile = Math.ceil((p.x + 200) / OBSTACLE_SPACING);
+    for (let ti = firstTile; ti <= lastTile; ti++){
+      const ob = obstacleAt(ti);
+      if (!ob) continue;
+      const halfW = ob.type.w/2 + 14, halfH = ob.type.h/2 + 30;
+      if (Math.abs(p.x - ob.x) < halfW && Math.abs(p.y - ob.y) < halfH){
+        if (ob.type.jumpable && p.jumpOffset >= ob.type.clearHeight) continue;
+        p.x = prevX;
+        p.bumpFlash = 0.2;
+        st.shake = Math.max(st.shake, 0.15);
+        break;
+      }
+    }
 
     if (mx !== 0 || my !== 0){
       p.animT += dt * (p.sprinting ? 12 : 8);
@@ -369,21 +447,26 @@
     }
     if (p.hitFlash > 0) p.hitFlash -= dt;
     if (p.hitTextT > 0) p.hitTextT -= dt;
+    if (p.stunTimer > 0) p.stunTimer -= dt;
+    if (p.bumpFlash > 0) p.bumpFlash -= dt;
 
     // camera
     st.camX = Math.max(0, Math.min(WORLD_LENGTH - W, p.x - W*0.35));
     if (st.shake > 0) st.shake -= dt;
+    if (st.flashTimer > 0) st.flashTimer -= dt;
+
+    const ramp = difficultyRamp(st.elapsed);
 
     // spawn journalists
     st.spawnTimer -= dt;
     if (st.spawnTimer <= 0 && st.journalists.length < MAX_JOURNALISTS){
       spawnJournalist(st);
-      const ramp = Math.min(st.elapsed/45, 1);
-      st.spawnTimer = rand(2.6 - ramp*1.3, 3.6 - ramp*1.6);
+      st.spawnTimer = rand(2.6 - ramp*1.6, 3.6 - ramp*2.0);
     }
 
     // journalists update
     for (const j of st.journalists){
+      j.speed = JOURNALIST_BASE_SPEED * j.speedFactor * (1 + ramp * 1.1);
       const dx = p.x - j.x, dy = p.y - j.y;
       const dist = Math.hypot(dx, dy) || 1;
       const nx = dx/dist, ny = dy/dist;
@@ -404,7 +487,7 @@
           text: QUESTIONS[Math.floor(Math.random()*QUESTIONS.length)],
           life: 2.2
         });
-        j.shootCooldown = rand(1.8, 3.3);
+        j.shootCooldown = rand(lerp(1.8, 0.7, ramp), lerp(3.3, 1.4, ramp));
       }
 
       if (dist < CATCH_RADIUS){
@@ -421,12 +504,14 @@
       b.life -= dt;
       const dist = Math.hypot(p.x - b.x, p.y - b.y);
       if (dist < HIT_RADIUS){
-        p.slowStacks.push(now + 3.0);
-        if (p.slowStacks.length > 6) p.slowStacks.shift();
+        p.slowStacks.push(now + 3.6);
+        if (p.slowStacks.length > 5) p.slowStacks.shift();
+        p.stunTimer = 0.4;
         p.hitFlash = 0.35;
         p.lastHitText = b.text;
         p.hitTextT = 1.4;
-        st.shake = 0.25;
+        st.shake = 0.35;
+        st.flashTimer = 0.35;
         st.bubbles.splice(i,1);
         continue;
       }
@@ -670,6 +755,36 @@
     ctx.fillText('BEZPEČNÝ DOM', bx+houseW/2, by-42);
   }
 
+  // ---------- Obstacles ----------
+  function drawObstacles(camX){
+    const firstTile = Math.floor(camX / OBSTACLE_SPACING) - 1;
+    const lastTile = Math.ceil((camX + W) / OBSTACLE_SPACING) + 1;
+    for (let ti = firstTile; ti <= lastTile; ti++){
+      const ob = obstacleAt(ti);
+      if (!ob) continue;
+      const sx = ob.x - camX;
+      if (sx < -80 || sx > W + 80) continue;
+      drawObstacle(sx, ob.y, ob.type);
+    }
+  }
+
+  function drawObstacle(sx, sy, type){
+    const w = type.w, h = type.h;
+    ctx.fillStyle = type.color;
+    ctx.fillRect(sx - w/2, sy - h, w, h);
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.fillRect(sx - w/2, sy - h, w, 5);
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy + 3, w*0.55, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    if (!type.jumpable){
+      // small warning stripe to signal it must be dodged, not jumped
+      ctx.fillStyle = '#f2c94c';
+      ctx.fillRect(sx - w/2, sy - h*0.5 - 3, w, 5);
+    }
+  }
+
   // ---------- Character drawing (blocky pixel-art) ----------
   function drawCharacter(sx, sy, opts){
     // sx,sy = feet position (ground contact point)
@@ -802,6 +917,8 @@
       drawStreet(st.camX);
     }
 
+    drawObstacles(st.camX);
+
     // journalists (draw back-to-front by y for pseudo depth)
     const sortedJ = st.journalists.slice().sort((a,b)=>a.y-b.y);
     for (const j of sortedJ){
@@ -820,15 +937,24 @@
     // player
     const p = st.player;
     const psx = p.x - st.camX;
-    drawCharacter(psx, p.y, {facing:p.facing, frame:p.animFrame, jacket:'#2f6fb0', hair:'#3a2a1a', hitFlash:p.hitFlash});
+    const psy = p.y - p.jumpOffset;
+    drawCharacter(psx, psy, {facing:p.facing, frame:p.animFrame, jacket:'#2f6fb0', hair:'#3a2a1a', hitFlash: Math.max(p.hitFlash, p.bumpFlash||0)});
 
     ctx.restore();
+
+    // full-screen flash on a question hit (drawn outside the shake transform)
+    if (st.flashTimer > 0){
+      const t = st.flashTimer / 0.35;
+      const flicker = Math.sin(st.flashTimer * 60) > 0 ? 1 : 0.25;
+      ctx.fillStyle = `rgba(255,60,60,${(0.45 * t * flicker).toFixed(3)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
 
     // hit text (screen space, outside shake)
     if (p.hitTextT > 0){
       hitTextEl.style.display = 'block';
       hitTextEl.style.left = (psx / W * 100) + '%';
-      hitTextEl.style.top = ((p.y-80) / H * 100) + '%';
+      hitTextEl.style.top = ((psy-80) / H * 100) + '%';
       hitTextEl.textContent = p.lastHitText;
     } else {
       hitTextEl.style.display = 'none';
