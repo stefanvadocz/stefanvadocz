@@ -926,28 +926,37 @@ window.addEventListener('keyup', e=>{ keys[e.code] = false; });
 
 const NOLOCK = /[?&]nolock/.test(location.search);
 let pointerLocked = false;
+// Uzamknutie kurzora nie je vždy k dispozícii — napríklad keď hra beží vo vnorenom
+// rámci bez povolenia "pointer-lock". Vtedy prejdeme na režim bez zámku: rozhliadanie
+// funguje z pohybu myši aj tak, len kurzor môže vyjsť z okna. Bez tejto poistky by sa
+// v takom prostredí nedalo vôbec strieľať, lebo prvé kliknutie by len skúšalo zamykať.
+let lockUnavailable = !canvas.requestPointerLock;
+const freeLook = () => NOLOCK || lockUnavailable;
+
+document.addEventListener('pointerlockerror', ()=>{ lockUnavailable = true; });
 document.addEventListener('pointerlockchange', ()=>{
   pointerLocked = document.pointerLockElement === canvas;
-  if (!pointerLocked && game.status==='playing' && !isTouch && !NOLOCK) pauseGame();
+  if (!pointerLocked && game.status==='playing' && !isTouch && !freeLook()) pauseGame();
 });
 document.addEventListener('mousemove', e=>{
-  if ((pointerLocked || NOLOCK) && (game.status==='playing')){
+  if ((pointerLocked || freeLook()) && (game.status==='playing')){
     player.yaw -= e.movementX * 0.0022;
     player.pitch = clamp(player.pitch - e.movementY * 0.0022, -1.45, 1.45);
   }
 });
 canvas.addEventListener('mousedown', e=>{
   if (game.status==='playing' && !isTouch){
-    if (!pointerLocked && !NOLOCK){ lockPointer(); return; }
+    if (!pointerLocked && !freeLook()){ lockPointer(); return; }
     if (e.button === 0) player.firing = true;
   }
 });
 window.addEventListener('mouseup', e=>{ if (e.button===0) player.firing = false; });
 function lockPointer(){
+  if (lockUnavailable) return;
   try {
     const p = canvas.requestPointerLock();
-    if (p && p.catch) p.catch(()=>{});
-  } catch(err){}
+    if (p && p.catch) p.catch(()=>{ lockUnavailable = true; });
+  } catch(err){ lockUnavailable = true; }
 }
 
 // dotykové ovládanie
@@ -1371,7 +1380,7 @@ function startGame(){
   initAudio();
   if (actx && actx.state==='suspended') actx.resume();
   resetGame();
-  if (!isTouch && !NOLOCK) lockPointer();
+  if (!isTouch && !freeLook()) lockPointer();
 }
 function pauseGame(){
   if (game.status!=='playing') return;
@@ -1381,7 +1390,7 @@ function pauseGame(){
 function resumeGame(){
   game.status = 'playing';
   showScreen(null);
-  if (!isTouch && !NOLOCK) lockPointer();
+  if (!isTouch && !freeLook()) lockPointer();
 }
 function endGame(result){
   game.status = result; // 'over' | 'win'
@@ -1411,7 +1420,7 @@ window.addEventListener('keydown', e=>{
         !screens.win.classList.contains('hidden')) startGame();
     else if (!screens.pause.classList.contains('hidden')) resumeGame();
   }
-  if (e.code==='Escape' && game.status==='playing' && (isTouch||NOLOCK)) pauseGame();
+  if (e.code==='Escape' && game.status==='playing' && (isTouch||freeLook())) pauseGame();
 });
 
 // ---------- Hlavná slučka ----------
