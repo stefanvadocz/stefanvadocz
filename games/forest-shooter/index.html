@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Cesta lesom — 3D strieľačka</title>
+<style>
+  :root{
+    --olive: #8a9a5b;
+    --dark: #10130c;
+    --panel: rgba(14, 18, 10, 0.78);
+    --accent: #e8c66a;
+    --danger: #ff5c5c;
+    --ok: #7ade8a;
+    --text: #eef1e6;
+  }
+  *{ box-sizing: border-box; }
+  html, body{
+    margin:0; padding:0; height:100%;
+    background:#000;
+    overflow:hidden;
+    font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+    color: var(--text);
+    -webkit-user-select:none; user-select:none;
+    touch-action:none;
+  }
+  #game{ display:block; width:100vw; height:100vh; cursor:crosshair; }
+
+  /* ---------- HUD ---------- */
+  #hud{ position:fixed; inset:0; pointer-events:none; }
+  .hudBox{
+    background: var(--panel);
+    border: 1px solid rgba(180,200,140,0.25);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    text-shadow: 0 1px 2px #000;
+  }
+  .hudTopLeft{ position:absolute; top:12px; left:12px; display:flex; gap:8px; }
+  .hudTopRight{ position:absolute; top:12px; right:12px; display:flex; gap:8px; }
+  .hudLabel{ opacity:0.7; font-size:11px; text-transform:uppercase; display:block; }
+  .hudVal{ font-size:18px; font-weight:600; }
+
+  #progressWrap{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    width:min(320px, 40vw); height:12px;
+    background: var(--panel);
+    border:1px solid rgba(180,200,140,0.25); border-radius:6px;
+  }
+  #progressFill{
+    height:100%; width:0%;
+    background: linear-gradient(90deg, #6f8a4a, var(--ok));
+    border-radius:5px;
+    transition: width 0.3s linear;
+  }
+  #progressWrap::after{
+    content:'🏠'; position:absolute; right:-8px; top:-9px; font-size:16px;
+  }
+
+  #hitsBox{ display:flex; align-items:center; gap:6px; }
+  .hitPip{
+    width:16px; height:16px; border-radius:3px;
+    background: var(--ok);
+    box-shadow: 0 0 6px rgba(122,222,138,0.5);
+    transition: all 0.2s;
+  }
+  .hitPip.lost{ background:#571b1b; box-shadow:none; }
+
+  #ammoBox .hudVal{ color: var(--accent); }
+  #reloadNote{
+    position:absolute; bottom:18%; left:50%; transform:translateX(-50%);
+    display:none; color:var(--accent); font-size:15px; font-weight:600;
+    text-shadow:0 1px 3px #000;
+    animation: blink 0.6s infinite alternate;
+  }
+  #houseNote{
+    position:absolute; bottom:12%; left:50%; transform:translateX(-50%);
+    display:none; color:var(--ok); font-size:16px; font-weight:700;
+    letter-spacing:0.5px; text-shadow:0 1px 4px #000; white-space:nowrap;
+  }
+  #critNote{
+    position:absolute; top:64px; left:50%; transform:translateX(-50%);
+    display:none; color:var(--danger); font-size:14px; font-weight:700;
+    text-shadow:0 1px 3px #000;
+    animation: blink 0.5s infinite alternate;
+  }
+  @keyframes blink{ from{opacity:1;} to{opacity:0.35;} }
+
+  #crosshair{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:22px; height:22px;
+  }
+  #crosshair::before, #crosshair::after{
+    content:''; position:absolute; background:rgba(255,255,255,0.85);
+    box-shadow:0 0 2px #000;
+  }
+  #crosshair::before{ left:50%; top:0; width:2px; height:100%; transform:translateX(-50%);
+    clip-path: polygon(0 0, 100% 0, 100% 32%, 0 32%, 0 68%, 100% 68%, 100% 100%, 0 100%); }
+  #crosshair::after{ top:50%; left:0; height:2px; width:100%; transform:translateY(-50%);
+    clip-path: polygon(0 0, 32% 0, 32% 100%, 0 100%, 68% 0, 100% 0, 100% 100%, 68% 100%); }
+
+  #damageFlash{
+    position:fixed; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(255,30,20,0.25) 0%, rgba(180,10,5,0.65) 100%);
+    opacity:0; transition: opacity 0.5s ease-out;
+  }
+  #vignette{
+    position:fixed; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(120,0,0,0.9) 100%);
+    opacity:0; transition: opacity 0.6s;
+  }
+
+  /* ---------- Obrazovky ---------- */
+  .screen{
+    position:fixed; inset:0; z-index:10;
+    background: rgba(6,9,4,0.88);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:20px; gap:14px;
+    overflow-y:auto;
+  }
+  .hidden{ display:none !important; }
+  .title{
+    font-size: clamp(26px, 5vw, 44px);
+    font-weight: 800; letter-spacing: 2px;
+    color: var(--olive);
+    text-shadow: 0 2px 8px #000;
+  }
+  .subtitle{ font-size:15px; max-width:640px; line-height:1.6; color:#cfd6c0; }
+  .rules{
+    font-size:13.5px; max-width:660px; line-height:1.7; color:#c4cbb4;
+    background: rgba(255,255,255,0.04);
+    border:1px solid rgba(180,200,140,0.2); border-radius:8px;
+    padding:12px 18px; text-align:left;
+  }
+  .rules b{ color: var(--accent); }
+  .kbd{
+    display:inline-block; border:1px solid #667; border-bottom-width:3px;
+    border-radius:4px; padding:0 7px; font-size:12px;
+    background:#1f2518; color:#fff; font-family:monospace;
+  }
+  button.btn{
+    font-family:inherit; font-size:17px; font-weight:700;
+    background: var(--olive); color:#141a0a;
+    border:none; padding:12px 30px; border-radius:6px; cursor:pointer;
+    box-shadow: 0 4px 0 #5a6a3b;
+    pointer-events:auto;
+  }
+  button.btn:active{ transform:translateY(3px); box-shadow:0 1px 0 #5a6a3b; }
+  .scoreLine{ font-size:20px; color: var(--ok); font-weight:600; }
+  .note{ font-size:12px; color:#8a917c; }
+
+  /* ---------- Dotykové ovládanie ---------- */
+  .touchControls{ display:none; }
+  body.touch .touchControls{ display:block; }
+  #joyZone{
+    position:fixed; left:18px; bottom:18px; width:120px; height:120px;
+    border-radius:50%; border:2px solid rgba(255,255,255,0.25);
+    background: rgba(20,26,12,0.35);
+    pointer-events:auto; z-index:5;
+  }
+  #joyKnob{
+    position:absolute; left:50%; top:50%; margin:-26px 0 0 -26px;
+    width:52px; height:52px; border-radius:50%;
+    background: rgba(180,200,140,0.45);
+  }
+  #fireBtn, #reloadBtn{
+    position:fixed; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; color:#fff;
+    pointer-events:auto; z-index:5;
+    border:2px solid rgba(255,255,255,0.3);
+  }
+  #fireBtn{
+    right:22px; bottom:26px; width:84px; height:84px;
+    background: rgba(160,40,30,0.5); font-size:15px;
+  }
+  #reloadBtn{
+    right:120px; bottom:44px; width:54px; height:54px;
+    background: rgba(40,60,30,0.55); font-size:12px;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="damageFlash"></div>
+<div id="vignette"></div>
+
+<div id="hud">
+  <div class="hudTopLeft">
+    <div class="hudBox"><span class="hudLabel">Skóre</span><span class="hudVal" id="scoreVal">0</span></div>
+    <div class="hudBox"><span class="hudLabel">Zneškodnení</span><span class="hudVal" id="killsVal">0</span></div>
+  </div>
+  <div id="progressWrap"><div id="progressFill"></div></div>
+  <div id="critNote">KRITICKÝ STAV — ďalší zásah je posledný!</div>
+  <div class="hudTopRight">
+    <div class="hudBox" id="hitsBox">
+      <span class="hudLabel" style="margin-right:2px">Výdrž</span>
+      <div class="hitPip"></div><div class="hitPip"></div><div class="hitPip"></div>
+    </div>
+    <div class="hudBox" id="ammoBox"><span class="hudLabel">Náboje</span><span class="hudVal"><span id="ammoVal">30</span> / ∞</span></div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="reloadNote">NABÍJANIE…</div>
+  <div id="houseNote">BEZPEČNÝ DOM PRED VAMI — DOBEHNITE K NEMU!</div>
+</div>
+
+<div class="touchControls">
+  <div id="joyZone"><div id="joyKnob"></div></div>
+  <div id="fireBtn">PAĽ</div>
+  <div id="reloadBtn">R</div>
+</div>
+
+<div id="startScreen" class="screen">
+  <div class="title">CESTA LESOM</div>
+  <div class="subtitle">Uviazli ste na nepriateľskom území. Jediná cesta do bezpečia vedie cez les plný vojakov. Prebojujte sa na druhú stranu — v čistinke na konci lesa vás čaká bezpečný dom.</div>
+  <div class="rules">
+    <b>Ovládanie:</b> <span class="kbd">W</span><span class="kbd">A</span><span class="kbd">S</span><span class="kbd">D</span> pohyb,
+    <b>myš</b> rozhliadanie, <b>ľavé tlačidlo</b> streľba (podržte pre automatickú paľbu),
+    <span class="kbd">R</span> nabitie, <span class="kbd">Shift</span> šprint.<br><br>
+    <b>Pravidlá:</b> Vydržíte najviac <b>3 zásahy</b> — štvrtý je koniec. Kryte sa za kmene stromov, guľky cez ne neprejdú.
+    Vojaci si vás všimnú na dohľad, strieľajú v dávkach a postupujú k vám. Za každú prežitú sekundu získavate <b>10 bodov</b>,
+    za dosiahnutie bezpečného domu <b>bonus 500 bodov</b>. Sledujte ukazovateľ postupu hore — dom je na jeho konci.
+  </div>
+  <button class="btn" id="startBtn">ŠTART (Enter)</button>
+  <div class="note">Odporúčame hrať na počítači s myšou. Kliknutím sa uzamkne kurzor — uvoľníte ho klávesom Esc.</div>
+</div>
+
+<div id="pauseScreen" class="screen hidden">
+  <div class="title">PAUZA</div>
+  <div class="subtitle">Kurzor je uvoľnený. Pokračujte, keď budete pripravení.</div>
+  <button class="btn" id="resumeBtn">POKRAČOVAŤ (Enter)</button>
+</div>
+
+<div id="gameoverScreen" class="screen hidden">
+  <div class="title" style="color:var(--danger)">PADLI STE V LESE</div>
+  <div class="subtitle">Štvrtý zásah bol priveľa. Les si vás nechal.</div>
+  <div class="scoreLine">Skóre: <span id="goScore">0</span> &nbsp;·&nbsp; Zneškodnení vojaci: <span id="goKills">0</span></div>
+  <button class="btn" id="retryBtn1">SKÚSIŤ ZNOVA (Enter)</button>
+</div>
+
+<div id="winScreen" class="screen hidden">
+  <div class="title" style="color:var(--ok)">STE V BEZPEČÍ!</div>
+  <div class="subtitle">Prešli ste lesom a dvere bezpečného domu sa za vami zavreli. Dokázali ste to.</div>
+  <div class="scoreLine">Skóre: <span id="winScore">0</span> &nbsp;·&nbsp; Zneškodnení vojaci: <span id="winKills">0</span></div>
+  <button class="btn" id="retryBtn2">HRAŤ ZNOVA (Enter)</button>
+</div>
+
+<script src="three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
